@@ -302,6 +302,20 @@ another $\mathcal{O}(n)$ pass. Hence, the algorithm runs in $\mathcal{O}(n)$ tim
 and uses $\mathcal{O}(n)$ space. This is optimal up to constant factors because
 merely reading the tree takes $\Omega(n)$ time.
 
+\section{Implementation}
+
+The algorithm is implemented in Python as the module \texttt{troupes.py}. It
+provides the linear-time dynamic program, the top-down reconstruction of an
+optimal assignment, a brute-force reference solver, and a verification suite that
+cross-checks the two over all labelled trees on up to six towns and over random
+trees for larger sizes. The complete source, together with the development
+notebook and this report, is available at
+\begin{center}
+\url{https://github.com/MaxMight01/DAA_Project}.
+\end{center}
+The accompanying \texttt{README.md} lists the requirements and gives the commands
+for running the implementation and its verification suite.
+
 \section{Conclusion}
 
 Modelling the towns as a tree and rooting it reduces the problem to a four-state
