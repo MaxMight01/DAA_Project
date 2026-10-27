@@ -1,0 +1,315 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{geometry}
+\usepackage{enumerate}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[hidelinks]{hyperref}
+
+\geometry{margin=1in, headheight=14pt}
+
+\input{../../public/macros.tex}
+
+\newcommand{\qtext}[1]{\begingroup\itshape #1\par\endgroup\smallskip}
+\newcommand{\OPT}{\operatorname{OPT}}
+\newcommand{\DC}{\operatorname{DC}}
+\newcommand{\with}[1]{\operatorname{w}_{#1}}  % w_0, w_1, w_2 : the constrained minima
+\newcommand{\Tv}{T_{v}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\renewcommand{\qedsymbol}{$\blacksquare$}
+
+\begin{document}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{Optimal Troupe Stationing}
+
+\begin{center}
+    {\LARGE\bfseries Optimal Military Troupe Stationing on a Tree}\\[4pt]
+    {\large Design and Analysis of Algorithms Project Report}\\[10pt]
+    {\normalsize Ramdas Singh\ (\texttt{bmat2423}) \qquad Sathvik H S\ (\texttt{bmat2428})}
+\end{center}
+\vspace{1em}
+
+\section{Problem Statement}
+
+\qtext{Country XYZ has $n$ important towns connected by roads. There are exactly
+$n-1$ roads, and every town is reachable from every other town by a unique
+sequence of roads. Two towns are called neighbors if a direct road connects them.
+The king decides to station military troupes in the towns. Each town can be
+assigned $0$, $1$, or $2$ troupes, subject to the condition that every town
+assigned $0$ troupes has at least one neighboring town assigned $2$ troupes.
+Design an algorithm to assign troupes to towns so that the total number of
+troupes assigned is minimized.}
+
+\noindent A connected graph on $n$ vertices with exactly $n-1$ edges, in which
+every pair of vertices is joined by a unique path, is precisely a \emph{tree}.
+The towns and roads therefore form a tree $T = (V, E)$ with $\abs{V} = n$.
+
+A \emph{troupe assignment}, or simply an \emph{assignment}, is a map
+$f : V \to \{0, 1, 2\}$. An assignment $f$ is \emph{feasible} if, for every town
+$v$ with $f(v) = 0$, at least one neighbor $u$ of $v$ has $f(u) = 2$.
+
+The task is to compute a feasible assignment $f$ that minimizes the total
+$\abs{f} \defeq \sum_{v \in V} f(v)$ and to report the minimum. We say that a $0$-town
+is \emph{covered} by any neighbor carrying $2$ troupes. Feasibility therefore
+requires every $0$-town to be covered. A feasible assignment always exists
+because $f \equiv 1$ has no $0$-towns and costs $n$, so the optimum is at most
+$n$.
+
+\section{The Model: A Rooted-Tree Dynamic Program}
+
+The assignment condition makes a town dependent only on itself and its
+\emph{neighbors}. This locality can be exploited using bottom-up dynamic
+programming on a rooted tree. We root the tree at an arbitrary town $r$ and
+process it from the leaves upward. For a vertex $v$, let $\Tv$ be the subtree
+rooted at $v$, and let $C(v)$ be the set of children of $v$. The subtrees
+$\{T_u : u \in C(v)\}$ are pairwise vertex-disjoint, and
+$V(\Tv) = \{v\} \cup \bigcup_{u \in C(v)} V(T_u)$. Crucially, the only edge
+joining $T_u$ to the rest of $\Tv$ is the edge $vu$. Hence, once $f(v)$ is fixed,
+the assignment on each child subtree can be chosen independently. The assignment
+condition at any vertex $x \neq v$ in $\Tv$ depends only on the assignment within
+the child subtree containing $x$, with one exception. A child $u$ may be covered
+by its parent $v$ when $f(v) = 2$ and $f(u) = 0$. This is the optimal-substructure
+property that drives the recurrence.
+
+The subtlety is that whether a vertex is covered may depend on a vertex
+\emph{outside} its own subtree, namely its parent. We therefore track enough
+information at each vertex to decouple its subtree from the parent's eventual
+choice. Specifically, we maintain four quantities per vertex.
+
+\begin{definition}[Internal satisfaction]
+Fix a rooted subtree $\Tv$ and an assignment $f$ on $V(\Tv)$. A vertex
+$x \in V(\Tv)$ is \emph{internally satisfied} if $f(x) \geq 1$, or if $f(x) = 0$
+and some neighbor $y$ of $x$ \emph{lying in $\Tv$} has $f(y) = 2$. Every vertex of
+$\Tv$ other than $v$ itself has all its neighbors inside $\Tv$, so internal
+satisfaction for such a vertex coincides with the assignment condition.
+\end{definition}
+
+\begin{definition}[The four states]\label{def:states}
+For a vertex $v$, define the following minima over assignments $f$ on $V(\Tv)$,
+with the convention $\min\varnothing = +\infty$:
+\begin{itemize}
+    \item $\with{1}(v)$: the minimum of $\abs{f}$ subject to $f(v) = 1$ and every
+    vertex of $\Tv$ being internally satisfied.
+    \item $\with{2}(v)$: the minimum of $\abs{f}$ subject to $f(v) = 2$ and every
+    vertex of $\Tv$ being internally satisfied.
+    \item $\OPT(v)$: the minimum of $\abs{f}$ subject to every vertex of $\Tv$
+    being internally satisfied, with $f(v)$ unrestricted.
+    \item $\DC(v)$ (``don't care''): the minimum of $\abs{f}$ subject to every
+    vertex of $\Tv$, except possibly $v$, being internally satisfied.
+\end{itemize}
+\end{definition}
+
+\noindent In words, $\OPT(v)$ is the cost of an optimal self-contained solution
+on $\Tv$, while $\DC(v)$ is the cost when $v$ is allowed to be an uncovered
+$0$-town because its parent will provide the covering $2$. We also write
+$\with{0}(v)$ for the variant of $\OPT(v)$ in which $f(v) = 0$ is forced, so that
+$\OPT(v) = \min\{\with{0}(v), \with{1}(v), \with{2}(v)\}$.
+
+Because the root $r$ has no parent, every town's assignment condition must be
+satisfied inside $T_r = T$. Therefore, the answer to the problem is exactly
+$\OPT(r)$.
+
+\subsection{The recurrences}
+
+Writing $S(v) = \sum_{u \in C(v)} \OPT(u)$ for the total optimum over the child
+subtrees, the four quantities satisfy
+\begin{align}
+    \with{1}(v) &= S(v) + 1, \label{eq:w1}\\
+    \with{2}(v) &= \sum_{u \in C(v)} \DC(u) \;+\; 2, \label{eq:w2}\\
+    \with{0}(v) &= \min_{w \in C(v)} \Big( \with{2}(w) + \!\!\sum_{\substack{u \in C(v)\\ u \neq w}}\!\! \OPT(u) \Big)
+                 \;=\; \min_{w \in C(v)} \big( S(v) - \OPT(w) + \with{2}(w) \big), \label{eq:w0}\\
+    \OPT(v)     &= \min\big\{\, \with{1}(v),\ \with{2}(v),\ \with{0}(v) \,\big\}, \label{eq:opt}\\
+    \DC(v)      &= \min\big\{\, \OPT(v),\ S(v) \,\big\}. \label{eq:dc}
+\end{align}
+A leaf has $C(v) = \varnothing$, so $S(v) = 0$. The base cases are
+$\with{1}(v) = 1$, $\with{2}(v) = 2$, and $\with{0}(v) = +\infty$, giving
+$\OPT(v) = 1$ and $\DC(v) = 0$.
+
+\subsection{The algorithm}
+
+A single post-order traversal evaluates the arrays bottom-up. The solution to our
+problem is $\OPT[r]$.
+
+\begin{algorithm}[ht]
+\caption{Minimum troupe assignment on a tree}
+\begin{algorithmic}
+\Function{MinTroupes}{tree $T$, root $r$}
+    \For{$v$ in a post-order of $T$ rooted at $r$}
+        \State $S \gets \sum_{u \in C(v)} \OPT[u]$
+        \State $\with{1}[v] \gets S + 1$
+        \State $\with{2}[v] \gets \sum_{u \in C(v)} \DC[u] \;+\; 2$
+        \State $\with{0} \gets \min_{w \in C(v)} \big( S - \OPT[w] + \with{2}[w] \big)$ \Comment{$+\infty$ if $C(v)=\varnothing$}
+        \State $\OPT[v] \gets \min\{\with{1}[v],\ \with{2}[v],\ \with{0}\}$
+        \State $\DC[v] \gets \min\{\OPT[v],\ S\}$
+    \EndFor
+    \State \Return $\OPT[r]$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\noindent The three sums and minima at $v$ can be computed in a single pass over
+$C(v)$. To recover an optimal \emph{assignment}, rather than merely its cost,
+store at each vertex which of the three cases attained the minimum
+in~\eqref{eq:opt}, along with the covering child $w$ for the $0$-case. Also store
+which case attained the minimum in~\eqref{eq:dc}. A second, top-down pass then
+determines $f(v)$ for every vertex $v$, expanding each child in the mode
+($\OPT$, $\DC$, or ``must be $2$'') dictated by the stored choice.
+
+\section{Proof of Correctness}
+
+We prove that the recurrences correctly compute the four states. The correctness
+of the algorithm then follows because the answer is $\OPT(r)$. Throughout the
+proof, we use the structural fact that once $f(v)$ is fixed, the restrictions
+$f_u \defeq f\!\restriction_{T_u}$ to the child subtrees are independent, and the
+only cross-subtree adjacency is given by each edge $vu$.
+
+\begin{lemma}\label{lem:w1}
+$\with{1}(v) = S(v) + 1$.
+\end{lemma}
+\begin{proof}
+Let $f$ be feasible for $\with{1}(v)$, so that $f(v) = 1$ and every vertex of
+$\Tv$ is internally satisfied. Since $f(v) = 1 \neq 2$, the vertex $v$ provides no
+cover. Therefore, each child $u$ and every other vertex of $T_u$, whose neighbors
+all lie in $T_u$, must be internally satisfied within $T_u$. Thus, each $f_u$ is
+feasible for $\OPT(u)$, giving $\abs{f} = 1 + \sum_u \abs{f_u} \ge 1 + S(v)$.
+Conversely, taking an $\OPT(u)$-optimal assignment $f_u$ on each child subtree and
+setting $f(v) = 1$ yields a feasible assignment of cost exactly $1 + S(v)$. The
+vertex $v$ is satisfied because $f(v) = 1$, and every other vertex retains its
+in-subtree witness. Hence, equality holds.
+\end{proof}
+
+\begin{lemma}\label{lem:w2}
+$\with{2}(v) = \sum_{u \in C(v)} \DC(u) + 2$.
+\end{lemma}
+\begin{proof}
+Let $f$ be feasible for $\with{2}(v)$, so that $f(v) = 2$ and every vertex of
+$\Tv$ is internally satisfied. For a child $u$ with $f(u) = 0$, the covering $2$
+may now be $v$ itself, so $u$ need not be internally satisfied within $T_u$. Every
+other vertex of $T_u$ must still be internally satisfied. Thus, each $f_u$ is
+feasible for $\DC(u)$, and $\abs{f} \ge 2 + \sum_u \DC(u)$. Conversely, choose a
+$\DC(u)$-optimal assignment $f_u$ on each child subtree and set $f(v) = 2$. Then
+$v$ is satisfied, any child $u$ that was an uncovered $0$-town under $\DC$ is now
+covered by $v$, and all other vertices retain their witnesses. Hence, $f$ is
+feasible with cost $2 + \sum_u \DC(u)$, proving equality.
+\end{proof}
+
+\begin{lemma}\label{lem:w0}
+$\with{0}(v) = \min_{w \in C(v)} \big( S(v) - \OPT(w) + \with{2}(w) \big)$, which
+is $+\infty$ when $C(v) = \varnothing$.
+\end{lemma}
+\begin{proof}
+Let $f$ be feasible for $\with{0}(v)$, so that $f(v) = 0$ and every vertex of
+$\Tv$ is internally satisfied. Since $f(v) = 0$, the vertex $v$ must be covered
+from within $\Tv$. Its only in-subtree neighbors are its children, so some child
+$w$ must have $f(w) = 2$. For that child, $f_w$ has $f(w) = 2$ and every vertex of
+$T_w$ is internally satisfied because the neighbors of $w$ other than $v$ lie in
+$T_w$, and $v$ contributes $0$. Thus, $f_w$ is feasible for $\with{2}(w)$. For
+every other child $u \neq w$, the value $f(v) = 0$ provides no cover, so $f_u$
+must be feasible for $\OPT(u)$. Hence,
+$\abs{f} \ge \with{2}(w) + \sum_{u \neq w}\OPT(u) = S(v) - \OPT(w) + \with{2}(w)$.
+Minimizing over the designated child $w$ gives the lower bound.
+
+Conversely, choose any child $w$, an optimal assignment for $\with{2}(w)$ on
+$T_w$, and an optimal assignment for $\OPT(u)$ on every other child subtree.
+Setting $f(v) = 0$ gives a feasible assignment because $v$ is covered by $w$. This
+assignment attains the stated bound, proving the reverse inequality. If $v$ has no
+children, it cannot be covered, so no feasible assignment exists and
+$\with{0}(v) = +\infty$.
+\end{proof}
+
+\begin{lemma}\label{lem:optdc}
+$\OPT(v) = \min\{\with{0}(v),\with{1}(v),\with{2}(v)\}$ and
+$\DC(v) = \min\{\OPT(v),\, S(v)\}$.
+\end{lemma}
+\begin{proof}
+The first identity is immediate. A feasible assignment $f$ for $\OPT(v)$ has
+$f(v) \in \{0, 1, 2\}$, and conditioning on that value gives exactly the three
+constrained minima.
+
+For $\DC(v)$, the vertex $v$ is exempt from the internal satisfaction
+requirement. If $f(v) \ge 1$, or if $f(v) = 0$ and has an in-subtree covering
+child, then every vertex of $\Tv$ is internally satisfied, and the cheapest such
+assignment costs $\OPT(v)$. The only remaining possibility is $f(v) = 0$ with no
+covering child, in which case $v$ relies on its parent. Since $v$ provides no
+cover to its children, each child subtree must be feasible for $\OPT(u)$. The
+cheapest such assignment costs $\sum_u \OPT(u) = S(v)$. Taking the minimum of
+these two possibilities yields $\DC(v) = \min\{\OPT(v), S(v)\}$.
+\end{proof}
+
+\begin{theorem}
+\textup{\textsc{MinTroupes}}$(T, r)$ returns the minimum number of troupes over
+all feasible assignments of $T$.
+\end{theorem}
+\begin{proof}
+We show by induction on $\abs{V(\Tv)}$ that the computed values
+$\OPT[v], \DC[v], \with{1}[v]$, and $\with{2}[v]$ equal the quantities defined in
+Definition~\ref{def:states}. \emph{Base case:} A leaf $v$ has
+$C(v) = \varnothing$. The recurrences give $\with{1}[v] = 1$, $\with{2}[v] = 2$,
+$\with{0} = +\infty$, $\OPT[v] = 1$, and $\DC[v] = 0$. These values match the
+definitions directly. A lone $0$-town cannot be covered, a lone $1$-town is the
+cheapest internally satisfied assignment, and exempting the leaf allows the
+zero-cost assignment $f(v) = 0$. \emph{Inductive step:} For an internal vertex
+$v$, every child $u$ has a strictly smaller subtree. By the inductive hypothesis,
+$\OPT[u]$ and $\DC[u]$ are correct. Lemmas~\ref{lem:w1}, \ref{lem:w2},
+\ref{lem:w0}, and \ref{lem:optdc} then show that the values computed at $v$
+from~\eqref{eq:w1}--\eqref{eq:dc} equal the defined quantities. Finally, since the
+root $r$ has no parent, internal satisfaction throughout $T_r = T$ is exactly the
+feasibility condition for the whole tree. Hence, $\OPT(r)$ is the minimum cost of
+a feasible assignment, which is what the algorithm returns.
+\end{proof}
+
+\begin{corollary}
+The top-down reconstruction outputs a feasible assignment $f$ with
+$\abs{f} = \OPT(r)$.
+\end{corollary}
+\begin{proof}
+Each stored choice records a case of the corresponding recurrence that attained
+the minimum for a vertex processed in a given mode. Expanding the children in the
+modes prescribed by that case, as established in
+Lemmas~\ref{lem:w1}--\ref{lem:optdc}, reproduces an assignment achieving the
+optimal value at each level. The proofs of those lemmas show that each such
+assignment is feasible for its corresponding state. By induction, the assignment
+produced at the root is feasible and has cost $\OPT(r)$.
+\end{proof}
+
+\section{Complexity Analysis}
+
+Each vertex $v$ is processed once, with work proportional to $1 + \abs{C(v)}$. The
+sums $S$ and $\with{2}$, along with the minimum for $\with{0}$, can be computed in
+a single scan of the children. Summing over all vertices,
+\[
+    \sum_{v \in V} \big(1 + \abs{C(v)}\big)
+    = n + \sum_{v\in V}\abs{C(v)}
+    = n + (n - 1)
+    = \mathcal{O}(n),
+\]
+since every non-root vertex is the child of exactly one parent, so
+$\sum_v \abs{C(v)} = \abs{E} = n-1$. Building the rooted structure using BFS or
+DFS to determine the parents and post-order is also $\mathcal{O}(n)$. The four
+arrays and the explicit stack use $\mathcal{O}(n)$ space. Reconstruction adds
+another $\mathcal{O}(n)$ pass. Hence, the algorithm runs in $\mathcal{O}(n)$ time
+and uses $\mathcal{O}(n)$ space. This is optimal up to constant factors because
+merely reading the tree takes $\Omega(n)$ time.
+
+\section{Conclusion}
+
+Modelling the towns as a tree and rooting it reduces the problem to a four-state
+dynamic program ($\OPT$, $\DC$, $\with{1}$, $\with{2}$) evaluated in a single
+post-order pass. The states precisely encode the one piece of non-local
+information required by the assignment condition, namely whether a $0$-town may
+rely on its parent for coverage. The resulting algorithm is provably correct by
+induction over subtrees and achieves optimal $\mathcal{O}(n)$ time and space
+complexity.
+
+\end{document}
